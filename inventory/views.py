@@ -1,0 +1,213 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate, login, logout
+from django.http import JsonResponse
+from .models import *
+from django.contrib.auth.models import User
+import pandas as pd
+from django.utils import timezone
+
+
+
+@login_required
+def home(request):
+    orders = MaterialOrder.objects.all().order_by('-created_at')
+    return render(request, 'inventory/home.html', {'orders': orders})
+
+
+
+# หน้าอัปโหลด Excel
+@login_required
+def import_excel(request):
+    if request.method == 'POST' and request.FILES.get('excel_file'):
+        df = pd.read_excel(request.FILES['excel_file'])
+
+        for _, row in df.iterrows():
+            def safe_value(val, default='-'):
+                if pd.isna(val):
+                    return default
+                return val
+
+            MaterialStock.objects.update_or_create(
+                code=safe_value(row['รหัสสินค้า']),
+                defaults={
+                    'name': safe_value(row['ชื่อสินค้า']),
+                    'barcode': safe_value(row['Barcode']),
+                    'cost': safe_value(row['ต้นทุน'], 0.0),
+                    'avg_cost': safe_value(row['ต้นทุนเฉลี่ย'], 0.0),
+                    'unit': safe_value(row['หน่วยนับ']),
+                    'sale_price': safe_value(row['ราคาขายสำหรับสาขา'], 0.0),
+                    'reorder_point': safe_value(row['จุดสั่งซื้อ'], 0),
+                    'max_stock': safe_value(row['จุดสูงสุด'], 0),
+                    'category': safe_value(row['ประเภทสินค้า']),
+                }
+            )
+        return redirect('material_list')
+    return render(request, 'inventory/import_excel.html')
+
+
+# รายการสต็อก
+@login_required
+def material_list(request):
+    materials = MaterialStock.objects.all()
+    return render(request, 'inventory/material_list.html', {'materials': materials})
+
+# หน้าออร์เดอร์สินค้า
+@login_required
+def order_material(request):
+    if request.method == 'POST':
+        note = request.POST.get('note', '')
+        material_ids = request.POST.getlist('material_id')
+        qtys = request.POST.getlist('qty')
+        costs = request.POST.getlist('cost')
+
+        print(material_ids)
+        print(qtys)
+        print(costs)
+
+        # ตรวจสอบความถูกต้องเบื้องต้น
+        # if not (material_ids and qtys and costs):
+        #     return redirect('order_material')
+        
+
+
+        order = MaterialOrder.objects.create(
+            ordered_by=request.user,
+            note=note,
+            created_at=timezone.now(),
+            total_cost=0
+        )
+
+        print('pass create order')
+
+        total_cost = 0
+        for mid, qty, cost in zip(material_ids, qtys, costs):
+            try:
+                if not mid or not qty or not cost:
+                    continue  # ข้ามถ้าข้อมูลว่าง
+
+                mid = int(mid)
+                quantity = int(qty)
+                cost_value = float(cost)
+
+                material = MaterialStock.objects.get(pk=mid)
+                item_total = quantity * cost_value
+
+                MaterialOrderItem.objects.create(
+                    order=order,
+                    material=material,
+                    quantity=quantity,
+                    unit_cost=cost_value,
+                    total_cost=item_total
+                )
+                total_cost += item_total
+
+            except (ValueError, MaterialStock.DoesNotExist):
+                continue  # ข้ามรายการที่ผิดพลาด
+
+        order.total_cost = total_cost
+        order.save()
+        return redirect('home')
+
+    today = timezone.now()
+    next_id = MaterialOrder.objects.count() + 1
+    return render(request, 'inventory/order_form.html', {
+        'today': today,
+        'order_id': f"{next_id:05d}"
+    })
+
+# ค้นหาสินค้าแบบ real-time
+@login_required
+def search_materials(request):
+    query = request.GET.get('q', '')
+    results = MaterialStock.objects.filter(name__icontains=query)[:10]  # จำกัด 10 รายการ
+    data = [
+        {
+            'id': m.id,
+            'code': m.code,
+            'name': m.name,
+            'cost': m.cost
+        }
+        for m in results
+    ]
+    return JsonResponse(data, safe=False)
+
+
+
+
+
+# dashboard
+@login_required
+def dashboard(request):
+    materials = MaterialStock.objects.all()
+    orders = MaterialOrder.objects.all()
+    return render(request, 'inventory/dashboard.html', {'materials': materials, 'orders': orders})
+
+
+
+
+@login_required
+def material_create(request):
+    if request.method == 'POST':
+        MaterialStock.objects.create(
+            code=request.POST['code'],
+            name=request.POST['name'],
+            barcode=request.POST.get('barcode', ''),
+            cost=request.POST.get('cost', 0),
+            avg_cost=request.POST.get('avg_cost', 0),
+            unit=request.POST.get('unit', ''),
+            sale_price=request.POST.get('sale_price', 0),
+            reorder_point=request.POST.get('reorder_point', 0),
+            max_stock=request.POST.get('max_stock', 0),
+            category=request.POST.get('category', '')
+        )
+        return redirect('material_list')
+    return render(request, 'inventory/material_form.html', {'title': 'เพิ่มวัตถุดิบ'})
+
+@login_required
+def material_edit(request, pk):
+    material = get_object_or_404(MaterialStock, pk=pk)
+    if request.method == 'POST':
+        for field in ['code', 'name', 'barcode', 'cost', 'avg_cost', 'unit', 'sale_price', 'reorder_point', 'max_stock', 'category']:
+            setattr(material, field, request.POST.get(field, getattr(material, field)))
+        material.save()
+        return redirect('material_list')
+    return render(request, 'inventory/material_form.html', {'title': 'แก้ไขวัตถุดิบ', 'material': material})
+
+@login_required
+def material_delete(request, pk):
+    material = get_object_or_404(MaterialStock, pk=pk)
+    if request.method == 'POST':
+        material.delete()
+        return redirect('material_list')
+    return render(request, 'inventory/material_confirm_delete.html', {'material': material})
+
+
+
+@login_required
+def order_edit(request, pk):
+    order = get_object_or_404(MaterialOrder, pk=pk)
+    if request.method == 'POST':
+        note = request.POST.get('note', '')
+        total = 0
+        for item in order.items.all():
+            qty = int(request.POST.get(f'qty_{item.id}', item.quantity))
+            cost = float(request.POST.get(f'cost_{item.id}', item.unit_cost))
+            item.quantity = qty
+            item.unit_cost = cost
+            item.total_cost = qty * cost
+            item.save()
+            total += item.total_cost
+        order.note = note
+        order.total_cost = total
+        order.save()
+        return redirect('home')
+    return render(request, 'inventory/order_edit.html', {'order': order})
+
+@login_required
+def order_delete(request, pk):
+    order = get_object_or_404(MaterialOrder, pk=pk)
+    if request.method == 'POST':
+        order.delete()
+        return redirect('home')
+    return render(request, 'inventory/order_confirm_delete.html', {'order': order})

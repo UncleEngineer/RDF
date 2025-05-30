@@ -1,0 +1,45 @@
+{% extends 'inventory/base.html' %}
+{% block title %}Material Stock List{% endblock %}
+{% block content %}
+<h2>📦 รายการวัตถุดิบ</h2>
+<a href="{% url 'material_create' %}" class="btn btn-success mb-3">➕ เพิ่มวัตถุดิบ</a>
+<table class="table table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <th>รหัสสินค้า</th>
+      <th>ชื่อ</th>
+      <th>Barcode</th>
+      <th>ต้นทุน</th>
+      <th>เฉลี่ย</th>
+      <th>หน่วย</th>
+      <th>ขาย</th>
+      <th>สั่งซื้อ</th>
+      <th>สูงสุด</th>
+      <th>ประเภท</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in materials %}
+    <tr>
+      <td>{{ item.code }}</td>
+      <td>{{ item.name }}</td>
+      <td>{{ item.barcode }}</td>
+      <td>{{ item.cost }}</td>
+      <td>{{ item.avg_cost }}</td>
+      <td>{{ item.unit }}</td>
+      <td>{{ item.sale_price }}</td>
+      <td>{{ item.reorder_point }}</td>
+      <td>{{ item.max_stock }}</td>
+      <td>{{ item.category }}</td>
+      <td>
+        <a href="{% url 'material_edit' item.id %}" class="btn btn-sm btn-primary">✏️</a>
+        <a href="{% url 'material_delete' item.id %}" class="btn btn-sm btn-danger">🗑️</a>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="11" class="text-center">ไม่มีข้อมูล</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

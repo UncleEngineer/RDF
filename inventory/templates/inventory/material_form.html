@@ -1,0 +1,22 @@
+{% extends 'inventory/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h2>{{ title }}</h2>
+<form method="post">
+  {% csrf_token %}
+  <div class="row">
+    <div class="col-md-4 mb-3"><input type="text" name="code" value="{{ material.code|default:'' }}" class="form-control" placeholder="รหัสสินค้า" required></div>
+    <div class="col-md-4 mb-3"><input type="text" name="name" value="{{ material.name|default:'' }}" class="form-control" placeholder="ชื่อสินค้า" required></div>
+    <div class="col-md-4 mb-3"><input type="text" name="barcode" value="{{ material.barcode|default:'' }}" class="form-control" placeholder="Barcode"></div>
+    <div class="col-md-4 mb-3"><input type="number" step="0.01" name="cost" value="{{ material.cost|default:'' }}" class="form-control" placeholder="ต้นทุน"></div>
+    <div class="col-md-4 mb-3"><input type="number" step="0.01" name="avg_cost" value="{{ material.avg_cost|default:'' }}" class="form-control" placeholder="ต้นทุนเฉลี่ย"></div>
+    <div class="col-md-4 mb-3"><input type="text" name="unit" value="{{ material.unit|default:'' }}" class="form-control" placeholder="หน่วยนับ"></div>
+    <div class="col-md-4 mb-3"><input type="number" step="0.01" name="sale_price" value="{{ material.sale_price|default:'' }}" class="form-control" placeholder="ราคาขาย"></div>
+    <div class="col-md-4 mb-3"><input type="number" name="reorder_point" value="{{ material.reorder_point|default:'' }}" class="form-control" placeholder="จุดสั่งซื้อ"></div>
+    <div class="col-md-4 mb-3"><input type="number" name="max_stock" value="{{ material.max_stock|default:'' }}" class="form-control" placeholder="จุดสูงสุด"></div>
+    <div class="col-md-4 mb-3"><input type="text" name="category" value="{{ material.category|default:'' }}" class="form-control" placeholder="ประเภทสินค้า"></div>
+  </div>
+  <button type="submit" class="btn btn-success">💾 บันทึก</button>
+  <a href="{% url 'material_list' %}" class="btn btn-secondary">ย้อนกลับ</a>
+</form>
+{% endblock %}

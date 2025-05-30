@@ -1,0 +1,10 @@
+{% extends 'inventory/base.html' %}
+{% block title %}ลบรายการสั่งวัตถุดิบ{% endblock %}
+{% block content %}
+<h2>🗑️ ยืนยันการลบออร์เดอร์ MOD-{{ order.id|stringformat:"05d" }}</h2>
+<p>คุณต้องการลบรายการสั่งซื้อที่สร้างโดย <strong>{{ order.ordered_by.username }}</strong> เมื่อวันที่ {{ order.created_at|date:"Y-m-d H:i" }} ใช่หรือไม่?</p>
+<form method="post">{% csrf_token %}
+  <button type="submit" class="btn btn-danger">ลบ</button>
+  <a href="{% url 'home' %}" class="btn btn-secondary">ยกเลิก</a>
+</form>
+{% endblock %}

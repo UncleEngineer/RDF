@@ -1,0 +1,41 @@
+{% extends 'inventory/base.html' %}
+{% block title %}รายการสั่งวัตถุดิบ{% endblock %}
+
+{% block content %}
+<h2>📋 รายการสั่งวัตถุดิบ</h2>
+<a href="{% url 'order_material' %}" class="btn btn-success mb-3">➕ สั่งวัตถุดิบ</a>
+
+<table class="table table-striped table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <th>รหัสออร์เดอร์</th>
+      <th>ผู้สั่ง</th>
+      <th>วันที่สั่ง</th>
+      <th>หมายเหตุ</th>
+      <th>จำนวนรายการ</th>
+      <th>รวมต้นทุน</th>
+      <th>การจัดการ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    <tr>
+      <td>MOD-{{ order.id|stringformat:"05d" }}</td>
+      <td>{{ order.ordered_by.username }}</td>
+      <td>{{ order.created_at|date:"Y-m-d H:i" }}</td>
+      <td>{{ order.note|default:"-" }}</td>
+      <td>{{ order.items.count }}</td>
+      <td>{{ order.total_cost|floatformat:2 }}</td>
+      <td>
+        <a href="{% url 'order_edit' order.id %}" class="btn btn-sm btn-primary">✏️ แก้ไข</a>
+        <a href="{% url 'order_delete' order.id %}" class="btn btn-sm btn-danger">🗑️ ลบ</a>
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="7" class="text-center">ยังไม่มีรายการสั่งซื้อ</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

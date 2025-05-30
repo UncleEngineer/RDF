@@ -1,0 +1,117 @@
+{% extends 'inventory/base.html' %}
+{% block title %}Order Material{% endblock %}
+{% block content %}
+<h2>🛒 สร้างรายการสั่งวัตถุดิบ</h2>
+
+<div class="mb-4">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">ผู้สั่ง</label>
+      <input type="text" class="form-control" value="{{ request.user.username }}" disabled>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">รหัสการสั่งวัตถุดิบ</label>
+      <input type="text" class="form-control" value="MOD-{{ order_id }}" disabled>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">วันที่สั่งซื้อ</label>
+      <input type="text" class="form-control" value="{{ today|date:'Y-m-d H:i' }}" disabled>
+    </div>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label for="note" class="form-label">หมายเหตุ</label>
+    <textarea class="form-control" id="note" name="note" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+  </div>
+
+  <div class="mb-3">
+    <input type="text" id="searchBox" class="form-control" placeholder="🔍 ค้นหาวัตถุดิบ...">
+  </div>
+  <ul id="search-results" class="list-group mb-4"></ul>
+
+  <table class="table table-bordered" id="orderTable">
+    <thead class="table-secondary">
+      <tr>
+        <th>ชื่อสินค้า</th>
+        <th>ต้นทุน</th>
+        <th>จำนวน</th>
+        <th>รวม</th>
+        <th>ลบ</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="text-end mb-3">
+    <strong>รวมต้นทุนทั้งหมด: <span id="grandTotal">0.00</span></strong>
+  </div>
+  <button type="submit" class="btn btn-primary">✅ บันทึกรายการสั่งซื้อ</button>
+</form>
+
+<script>
+  const searchBox = document.getElementById('searchBox');
+  const searchResults = document.getElementById('search-results');
+  const orderTableBody = document.querySelector('#orderTable tbody');
+  const grandTotalEl = document.getElementById('grandTotal');
+
+  searchBox.addEventListener('input', function () {
+    const query = this.value;
+    fetch(`/search/?q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        searchResults.innerHTML = '';
+        if (data.length === 0) {
+          searchResults.innerHTML = '<li class="list-group-item">ไม่พบรายการ</li>';
+        } else {
+          data.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action';
+            li.style.cursor = 'pointer';
+            li.textContent = `${item.name} (${item.code})`;
+            li.onclick = () => selectMaterial(item.id, item.name, item.cost);
+            searchResults.appendChild(li);
+          });
+        }
+      });
+  });
+
+  function selectMaterial(id, name, cost) {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><input type="hidden" name="material_id" value="${id}">${name}</td>
+      <td><input type="hidden" name="cost" value="${cost}">${cost}</td>
+      <td><input type="number" name="qty" value="1" class="form-control qty" oninput="updateTotal(this)"></td>
+      <td class="total">${cost.toFixed(2)}</td>
+      <td><button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">ลบ</button></td>
+    `;
+    orderTableBody.appendChild(row);
+    updateGrandTotal();
+    searchBox.value = '';
+    searchResults.innerHTML = '';
+  }
+
+  function updateTotal(input) {
+    const row = input.closest('tr');
+    const qty = parseFloat(input.value) || 0;
+    const cost = parseFloat(row.querySelector('[name="cost"]').value);
+    row.querySelector('.total').textContent = (qty * cost).toFixed(2);
+    updateGrandTotal();
+  }
+
+  function removeRow(btn) {
+    btn.closest('tr').remove();
+    updateGrandTotal();
+  }
+
+  function updateGrandTotal() {
+    let total = 0;
+    document.querySelectorAll('#orderTable .total').forEach(td => {
+      total += parseFloat(td.textContent);
+    });
+    grandTotalEl.textContent = total.toFixed(2);
+  }
+</script>
+{% endblock %}

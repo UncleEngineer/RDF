@@ -1,0 +1,9 @@
+{% extends 'inventory/base.html' %}
+{% block title %}ลบวัตถุดิบ{% endblock %}
+{% block content %}
+<h2>คุณต้องการลบ "{{ material.name }}" ใช่หรือไม่?</h2>
+<form method="post">{% csrf_token %}
+  <button type="submit" class="btn btn-danger">ลบ</button>
+  <a href="{% url 'material_list' %}" class="btn btn-secondary">ยกเลิก</a>
+</form>
+{% endblock %}

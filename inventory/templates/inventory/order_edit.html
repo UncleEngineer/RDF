@@ -1,0 +1,34 @@
+{% extends 'inventory/base.html' %}
+{% block title %}แก้ไขรายการสั่งวัตถุดิบ{% endblock %}
+{% block content %}
+<h2>✏️ แก้ไขรายการสั่งวัตถุดิบ MOD-{{ order.id|stringformat:"05d" }}</h2>
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">หมายเหตุ</label>
+    <textarea name="note" class="form-control" rows="2">{{ order.note }}</textarea>
+  </div>
+  <table class="table table-bordered">
+    <thead class="table-secondary">
+      <tr>
+        <th>สินค้า</th>
+        <th>ต้นทุน</th>
+        <th>จำนวน</th>
+        <th>รวม</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in order.items.all %}
+      <tr>
+        <td>{{ item.material.name }}</td>
+        <td><input type="number" step="0.01" name="cost_{{ item.id }}" value="{{ item.unit_cost }}" class="form-control"></td>
+        <td><input type="number" name="qty_{{ item.id }}" value="{{ item.quantity }}" class="form-control"></td>
+        <td>{{ item.total_cost|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button type="submit" class="btn btn-primary">💾 บันทึกการเปลี่ยนแปลง</button>
+  <a href="{% url 'home' %}" class="btn btn-secondary">ย้อนกลับ</a>
+</form>
+{% endblock %}

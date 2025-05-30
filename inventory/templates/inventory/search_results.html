@@ -1,0 +1,10 @@
+<ul class="list-group">
+  {% for mat in results %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      {{ mat.name }} ({{ mat.code }})
+      <button class="btn btn-sm btn-success" onclick="selectMaterial({{ mat.id }}, '{{ mat.name }}', {{ mat.cost }})">เลือก</button>
+    </li>
+  {% empty %}
+    <li class="list-group-item">ไม่พบรายการ</li>
+  {% endfor %}
+</ul>
