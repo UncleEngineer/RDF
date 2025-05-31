@@ -40,14 +40,16 @@ class MaterialStock(models.Model):
 
 
 class MaterialOrder(models.Model):
-    material = models.ForeignKey(MaterialStock, on_delete=models.CASCADE)
-    quantity = models.IntegerField(default=0,null=True,blank=True)
-    total_cost = models.FloatField(default=0,null=True,blank=True)
+    # ลบ material field ออก เพราะ order หนึ่งรายการจะมีหลาย material ใน MaterialOrderItem
+    quantity = models.IntegerField(default=0, null=True, blank=True)  # field นี้อาจจะไม่จำเป็นแล้ว
+    total_cost = models.FloatField(default=0, null=True, blank=True)
     ordered_by = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     note = models.TextField(blank=True)
 
+    def __str__(self):
+        return f"Order #{self.id} by {self.ordered_by.username}"
 
 
 class MaterialOrderItem(models.Model):
@@ -57,4 +59,5 @@ class MaterialOrderItem(models.Model):
     unit_cost = models.FloatField()
     total_cost = models.FloatField()
 
-
+    def __str__(self):
+        return f"{self.material.name} x {self.quantity}"

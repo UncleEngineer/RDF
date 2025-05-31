@@ -61,16 +61,15 @@ def order_material(request):
         qtys = request.POST.getlist('qty')
         costs = request.POST.getlist('cost')
 
-        print(material_ids)
-        print(qtys)
-        print(costs)
+        print(f"Material IDs: {material_ids}")
+        print(f"Quantities: {qtys}")
+        print(f"Costs: {costs}")
 
-        # ตรวจสอบความถูกต้องเบื้องต้น
-        # if not (material_ids and qtys and costs):
-        #     return redirect('order_material')
-        
+        # ตรวจสอบว่ามีข้อมูลหรือไม่
+        if not material_ids:
+            return redirect('order_material')
 
-
+        # สร้าง order โดยไม่ต้องใส่ material (ถ้าใช้วิธี migration)
         order = MaterialOrder.objects.create(
             ordered_by=request.user,
             note=note,
@@ -78,7 +77,7 @@ def order_material(request):
             total_cost=0
         )
 
-        print('pass create order')
+        print('Order created successfully')
 
         total_cost = 0
         for mid, qty, cost in zip(material_ids, qtys, costs):
@@ -133,17 +132,12 @@ def search_materials(request):
     return JsonResponse(data, safe=False)
 
 
-
-
-
 # dashboard
 @login_required
 def dashboard(request):
     materials = MaterialStock.objects.all()
     orders = MaterialOrder.objects.all()
-    return render(request, 'inventory/dashboard.html', {'materials': materials, 'orders': orders})
-
-
+    return render(request, 'inventory/dashboard.html', {'stocks': materials, 'orders': orders})
 
 
 @login_required
@@ -181,7 +175,6 @@ def material_delete(request, pk):
         material.delete()
         return redirect('material_list')
     return render(request, 'inventory/material_confirm_delete.html', {'material': material})
-
 
 
 @login_required

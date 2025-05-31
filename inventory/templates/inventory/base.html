@@ -12,8 +12,9 @@
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
   <div class="container-fluid">
-    <a class="navbar-brand" href="/dashboard">RotideForest</a>
+    <a class="navbar-brand" href="{% url 'home' %}">RotideForest</a>
     <div>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Dashboard</a>
       <a href="/import" class="btn btn-outline-light btn-sm">Import</a>
       <a href="/order" class="btn btn-outline-light btn-sm">Order</a>
       <a href="/materials" class="btn btn-outline-light btn-sm">Material CRUD</a>
