@@ -55,6 +55,9 @@ def material_list(request):
 # หน้าออร์เดอร์สินค้า
 @login_required
 def order_material(request):
+    # 1-ปุ่มอนุมัติการสังซื้อ (user: area_manager)
+    # 2-รอบส่ง (รอบส่ง-หาดใหญ่-จันทร์ 2 มิถุนายน) (คนเพิ่มรอบส่ง: perchase_manager)
+    # 
     if request.method == 'POST':
         note = request.POST.get('note', '')
         material_ids = request.POST.getlist('material_id')
