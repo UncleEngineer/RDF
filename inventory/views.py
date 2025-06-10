@@ -6,13 +6,33 @@ from .models import *
 from django.contrib.auth.models import User
 import pandas as pd
 from django.utils import timezone
-
-
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate, login, logout
+from django.http import JsonResponse
+from .models import *
+from django.contrib.auth.models import User
+import pandas as pd
+from django.utils import timezone
+from django.contrib import messages
+from django.db.models import Count, Q
 
 @login_required
 def home(request):
     orders = MaterialOrder.objects.all().order_by('-created_at')
-    return render(request, 'inventory/home.html', {'orders': orders})
+    
+    # นับจำนวนตามสถานะ
+    status_counts = MaterialOrder.objects.aggregate(
+        total=Count('id'),
+        pending=Count('id', filter=Q(approval_status='pending')),
+        approved=Count('id', filter=Q(approval_status='approved')),
+        rejected=Count('id', filter=Q(approval_status='rejected'))
+    )
+    
+    return render(request, 'inventory/home.html', {
+        'orders': orders,
+        'status_counts': status_counts
+    })
 
 
 
@@ -207,3 +227,107 @@ def order_delete(request, pk):
         order.delete()
         return redirect('home')
     return render(request, 'inventory/order_confirm_delete.html', {'order': order})
+
+
+
+
+# views.py - อัปเดต order_material view
+
+
+
+# อัปเดต order_material view
+@login_required
+def order_material(request):
+    if request.method == 'POST':
+        note = request.POST.get('note', '')
+        delivery_round_id = request.POST.get('delivery_round')
+        material_ids = request.POST.getlist('material_id')
+        qtys = request.POST.getlist('qty')
+        costs = request.POST.getlist('cost')
+
+        print(f"Material IDs: {material_ids}")
+        print(f"Quantities: {qtys}")
+        print(f"Costs: {costs}")
+        print(f"Delivery Round ID: {delivery_round_id}")
+
+        # ตรวจสอบว่ามีข้อมูลหรือไม่
+        if not material_ids:
+            messages.error(request, 'กรุณาเลือกวัตถุดิบอย่างน้อย 1 รายการ')
+            return redirect('order_material')
+
+        try:
+            # ดึงรอบจัดส่ง
+            delivery_round = None
+            if delivery_round_id:
+                delivery_round = DeliveryRound.objects.get(pk=delivery_round_id)
+
+            # สร้าง order
+            order = MaterialOrder.objects.create(
+                ordered_by=request.user,
+                note=note,
+                delivery_round=delivery_round,
+                total_cost=0,
+                approval_status='pending'  # ตั้งค่าเริ่มต้นเป็นรออนุมัติ
+            )
+
+            print('Order created successfully')
+
+            total_cost = 0
+            items_created = 0
+
+            for mid, qty, cost in zip(material_ids, qtys, costs):
+                try:
+                    if not mid or not qty or not cost:
+                        continue  # ข้ามถ้าข้อมูลว่าง
+
+                    mid = int(mid)
+                    quantity = int(qty)
+                    cost_value = float(cost)
+
+                    if quantity <= 0:
+                        continue
+
+                    material = MaterialStock.objects.get(pk=mid)
+                    item_total = quantity * cost_value
+
+                    MaterialOrderItem.objects.create(
+                        order=order,
+                        material=material,
+                        quantity=quantity,
+                        unit_cost=cost_value,
+                        total_cost=item_total
+                    )
+                    total_cost += item_total
+                    items_created += 1
+
+                except (ValueError, MaterialStock.DoesNotExist):
+                    continue  # ข้ามรายการที่ผิดพลาด
+
+            if items_created == 0:
+                order.delete()
+                messages.error(request, 'ไม่สามารถสร้างรายการสั่งซื้อได้')
+                return redirect('order_material')
+
+            order.total_cost = total_cost
+            order.save()
+            
+            messages.success(request, f'สร้างรายการสั่งซื้อ MOD-{order.id:05d} เรียบร้อยแล้ว (สถานะ: รออนุมัติ)')
+            return redirect('home')
+
+        except DeliveryRound.DoesNotExist:
+            messages.error(request, 'ไม่พบรอบจัดส่งที่เลือก')
+            return redirect('order_material')
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+            return redirect('order_material')
+
+    # ดึงข้อมูลรอบจัดส่งที่เปิดใช้งาน
+    delivery_rounds = DeliveryRound.objects.filter(is_active=True).order_by('name')
+    
+    today = timezone.now()
+    next_id = MaterialOrder.objects.count() + 1
+    return render(request, 'inventory/order_form.html', {
+        'today': today,
+        'order_id': f"{next_id:05d}",
+        'delivery_rounds': delivery_rounds
+    })

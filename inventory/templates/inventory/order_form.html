@@ -3,28 +3,55 @@
 {% block content %}
 <h2>🛒 สร้างรายการสั่งวัตถุดิบ</h2>
 
+<!-- แสดง Messages -->
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
 <div class="mb-4">
   <div class="row g-3">
-    <div class="col-md-4">
+    <div class="col-md-3">
       <label class="form-label">ผู้สั่ง</label>
       <input type="text" class="form-control" value="{{ request.user.username }}" disabled>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
       <label class="form-label">รหัสการสั่งวัตถุดิบ</label>
       <input type="text" class="form-control" value="MOD-{{ order_id }}" disabled>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
       <label class="form-label">วันที่สั่งซื้อ</label>
       <input type="text" class="form-control" value="{{ today|date:'Y-m-d H:i' }}" disabled>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">สถานะ</label>
+      <input type="text" class="form-control bg-warning text-dark" value="รออนุมัติ" disabled>
     </div>
   </div>
 </div>
 
 <form method="post">
   {% csrf_token %}
-  <div class="mb-3">
-    <label for="note" class="form-label">หมายเหตุ</label>
-    <textarea class="form-control" id="note" name="note" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+  
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label for="delivery_round" class="form-label">รอบจัดส่ง <span class="text-danger">*</span></label>
+      <select class="form-select" id="delivery_round" name="delivery_round" required>
+        <option value="">-- เลือกรอบจัดส่ง --</option>
+        {% for round in delivery_rounds %}
+          <option value="{{ round.id }}">{{ round.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">หากไม่มีรอบจัดส่งที่ต้องการ สามารถเพิ่มได้ที่ <a href="/admin/inventory/deliveryround/" target="_blank">Django Admin</a></div>
+    </div>
+    <div class="col-md-6">
+      <label for="note" class="form-label">หมายเหตุ</label>
+      <textarea class="form-control" id="note" name="note" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+    </div>
   </div>
 
   <div class="mb-3">
@@ -46,11 +73,20 @@
   </table>
 
   <div class="text-end mb-3">
-    <strong>รวมต้นทุนทั้งหมด: <span id="grandTotal">0.00</span></strong>
+    <strong>รวมต้นทุนทั้งหมด: <span id="grandTotal" class="text-primary fs-5">0.00</span> บาท</strong>
   </div>
-  <button type="submit" class="btn btn-primary">✅ บันทึกรายการสั่งซื้อ</button>
+  
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-check"></i> ✅ บันทึกรายการสั่งซื้อ
+    </button>
+    <a href="{% url 'home' %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i> ← ย้อนกลับ
+    </a>
+  </div>
 </form>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   const searchBox = document.getElementById('searchBox');
   const searchResults = document.getElementById('search-results');
@@ -59,6 +95,11 @@
 
   searchBox.addEventListener('input', function () {
     const query = this.value;
+    if (query.length < 2) {
+      searchResults.innerHTML = '';
+      return;
+    }
+    
     fetch(`/search/?q=${encodeURIComponent(query)}`)
       .then(res => res.json())
       .then(data => {
@@ -68,24 +109,52 @@
         } else {
           data.forEach(item => {
             const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action';
+            li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
             li.style.cursor = 'pointer';
-            li.textContent = `${item.name} (${item.code})`;
+            li.innerHTML = `
+              <span>${item.name} (${item.code})</span>
+              <span class="badge bg-secondary">${item.cost} บาท</span>
+            `;
             li.onclick = () => selectMaterial(item.id, item.name, item.cost);
             searchResults.appendChild(li);
           });
         }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        searchResults.innerHTML = '<li class="list-group-item text-danger">เกิดข้อผิดพลาดในการค้นหา</li>';
       });
   });
 
   function selectMaterial(id, name, cost) {
+    // ตรวจสอบว่าเลือกสินค้าซ้ำหรือไม่
+    const existingRow = document.querySelector(`input[name="material_id"][value="${id}"]`);
+    if (existingRow) {
+      alert('สินค้านี้ถูกเลือกแล้ว');
+      searchBox.value = '';
+      searchResults.innerHTML = '';
+      return;
+    }
+
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td><input type="hidden" name="material_id" value="${id}">${name}</td>
-      <td><input type="hidden" name="cost" value="${cost}">${cost}</td>
-      <td><input type="number" name="qty" value="1" class="form-control qty" oninput="updateTotal(this)"></td>
-      <td class="total">${cost.toFixed(2)}</td>
-      <td><button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">ลบ</button></td>
+      <td>
+        <input type="hidden" name="material_id" value="${id}">
+        <strong>${name}</strong>
+      </td>
+      <td>
+        <input type="hidden" name="cost" value="${cost}">
+        <span class="fw-bold text-success">${cost}</span> บาท
+      </td>
+      <td>
+        <input type="number" name="qty" value="1" min="1" class="form-control qty" oninput="updateTotal(this)" style="width: 100px;">
+      </td>
+      <td class="total fw-bold text-primary">${cost.toFixed(2)}</td>
+      <td>
+        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+          🗑️ ลบ
+        </button>
+      </td>
     `;
     orderTableBody.appendChild(row);
     updateGrandTotal();
@@ -113,5 +182,22 @@
     });
     grandTotalEl.textContent = total.toFixed(2);
   }
+
+  // ป้องกันการ submit form ถ้าไม่มีสินค้า
+  document.querySelector('form').addEventListener('submit', function(e) {
+    const materialCount = document.querySelectorAll('input[name="material_id"]').length;
+    if (materialCount === 0) {
+      e.preventDefault();
+      alert('กรุณาเลือกวัตถุดิบอย่างน้อย 1 รายการ');
+      return;
+    }
+    
+    const deliveryRound = document.getElementById('delivery_round').value;
+    if (!deliveryRound) {
+      e.preventDefault();
+      alert('กรุณาเลือกรอบจัดส่ง');
+      return;
+    }
+  });
 </script>
 {% endblock %}

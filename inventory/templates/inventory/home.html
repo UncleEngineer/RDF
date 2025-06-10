@@ -3,39 +3,166 @@
 
 {% block content %}
 <h2>📋 รายการสั่งวัตถุดิบ</h2>
-<a href="{% url 'order_material' %}" class="btn btn-success mb-3">➕ สั่งวัตถุดิบ</a>
 
-<table class="table table-striped table-bordered">
-  <thead class="table-dark">
-    <tr>
-      <th>รหัสออร์เดอร์</th>
-      <th>ผู้สั่ง</th>
-      <th>วันที่สั่ง</th>
-      <th>หมายเหตุ</th>
-      <th>จำนวนรายการ</th>
-      <th>รวมต้นทุน</th>
-      <th>การจัดการ</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for order in orders %}
-    <tr>
-      <td>MOD-{{ order.id|stringformat:"05d" }}</td>
-      <td>{{ order.ordered_by.username }}</td>
-      <td>{{ order.created_at|date:"Y-m-d H:i" }}</td>
-      <td>{{ order.note|default:"-" }}</td>
-      <td>{{ order.items.count }}</td>
-      <td>{{ order.total_cost|floatformat:2 }}</td>
-      <td>
-        <a href="{% url 'order_edit' order.id %}" class="btn btn-sm btn-primary">✏️ แก้ไข</a>
-        <a href="{% url 'order_delete' order.id %}" class="btn btn-sm btn-danger">🗑️ ลบ</a>
-      </td>
-    </tr>
-    {% empty %}
-    <tr>
-      <td colspan="7" class="text-center">ยังไม่มีรายการสั่งซื้อ</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<!-- แสดง Messages -->
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{% url 'order_material' %}" class="btn btn-success">
+    <i class="fas fa-plus"></i> ➕ สั่งวัตถุดิบ
+  </a>
+  <div>
+    <small class="text-muted">
+      <span class="badge bg-warning">รออนุมัติ</span>
+      <span class="badge bg-success">อนุมัติแล้ว</span>
+      <span class="badge bg-danger">ไม่อนุมัติ</span>
+    </small>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped table-bordered">
+    <thead class="table-dark">
+      <tr>
+        <th>รหัสออร์เดอร์</th>
+        <th>ผู้สั่ง</th>
+        <th>รอบจัดส่ง</th>
+        <th>วันที่สั่ง</th>
+        <th>สถานะ</th>
+        <th>ผู้อนุมัติ</th>
+        <th>หมายเหตุ</th>
+        <th>จำนวนรายการ</th>
+        <th>รวมต้นทุน</th>
+        <th>การจัดการ</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr>
+        <td>
+          <strong>MOD-{{ order.id|stringformat:"05d" }}</strong>
+        </td>
+        <td>{{ order.ordered_by.username }}</td>
+        <td>
+          {% if order.delivery_round %}
+            <span class="badge bg-info">{{ order.delivery_round.name }}</span>
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>{{ order.created_at|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% if order.approval_status == 'pending' %}
+            <span class="badge bg-warning">รออนุมัติ</span>
+          {% elif order.approval_status == 'approved' %}
+            <span class="badge bg-success">อนุมัติแล้ว</span>
+          {% elif order.approval_status == 'rejected' %}
+            <span class="badge bg-danger">ไม่อนุมัติ</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if order.approved_by %}
+            {{ order.approved_by.username }}
+            {% if order.approved_at %}
+              <br><small class="text-muted">{{ order.approved_at|date:"m/d H:i" }}</small>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if order.note %}
+            <span title="{{ order.note }}">
+              {{ order.note|truncatechars:30 }}
+            </span>
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge bg-secondary">{{ order.items.count }}</span>
+        </td>
+        <td>
+          <strong class="text-primary">{{ order.total_cost|floatformat:2 }}</strong> บาท
+        </td>
+        <td>
+          <div class="btn-group btn-group-sm" role="group">
+            {% if order.approval_status == 'pending' %}
+              <a href="{% url 'order_edit' order.id %}" class="btn btn-primary" title="แก้ไข">
+                ✏️
+              </a>
+              <a href="{% url 'order_delete' order.id %}" class="btn btn-danger" title="ลบ">
+                🗑️
+              </a>
+            {% else %}
+              <span class="text-muted small">ไม่สามารถแก้ไขได้</span>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="10" class="text-center text-muted py-4">
+          <i class="fas fa-inbox fa-3x mb-3"></i><br>
+          ยังไม่มีรายการสั่งซื้อ<br>
+          <a href="{% url 'order_material' %}" class="btn btn-success btn-sm mt-2">
+            เริ่มสั่งซื้อเลย
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- สถิติสรุป -->
+<div class="row mt-4">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title text-primary">{{ orders.count }}</h5>
+        <p class="card-text">รายการทั้งหมด</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title text-warning">
+          {{ orders|length }}
+        </h5>
+        <p class="card-text">รออนุมัติ</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title text-success">
+          {{ orders|length }}
+        </h5>
+        <p class="card-text">อนุมัติแล้ว</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title text-danger">
+          {{ orders|length }}
+        </h5>
+        <p class="card-text">ไม่อนุมัติ</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 {% endblock %}
