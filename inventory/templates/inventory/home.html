@@ -2,7 +2,7 @@
 {% block title %}รายการสั่งวัตถุดิบ{% endblock %}
 
 {% block content %}
-<h2>📋 รายการสั่งวัตถุดิบ</h2>
+<h2>📋 รายการสั่งวัตถุดิบ ({{ request.user.username }})</h2>
 
 <!-- แสดง Messages -->
 {% if messages %}
@@ -45,6 +45,7 @@
     </thead>
     <tbody>
       {% for order in orders %}
+      
       <tr>
         <td>
           <strong>MOD-{{ order.id|stringformat:"05d" }}</strong>
@@ -107,6 +108,7 @@
           </div>
         </td>
       </tr>
+      
       {% empty %}
       <tr>
         <td colspan="10" class="text-center text-muted py-4">
@@ -127,7 +129,7 @@
   <div class="col-md-3">
     <div class="card text-center">
       <div class="card-body">
-        <h5 class="card-title text-primary">{{ orders.count }}</h5>
+        <h5 class="card-title text-primary">{{ total_order }}</h5>
         <p class="card-text">รายการทั้งหมด</p>
       </div>
     </div>
@@ -136,32 +138,14 @@
     <div class="card text-center">
       <div class="card-body">
         <h5 class="card-title text-warning">
-          {{ orders|length }}
+          {{ total_cost }}
         </h5>
-        <p class="card-text">รออนุมัติ</p>
+        <p class="card-text">ยอดสั่งซื้อ</p>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <h5 class="card-title text-success">
-          {{ orders|length }}
-        </h5>
-        <p class="card-text">อนุมัติแล้ว</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <h5 class="card-title text-danger">
-          {{ orders|length }}
-        </h5>
-        <p class="card-text">ไม่อนุมัติ</p>
-      </div>
-    </div>
-  </div>
+ 
+  
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

@@ -20,6 +20,23 @@ from django.db.models import Count, Q
 @login_required
 def home(request):
     orders = MaterialOrder.objects.all().order_by('-created_at')
+    filter_order = []
+    all_cost = []
+
+    see_all_check = ['admin','admin2','area_manager','coo','ceo']
+
+    for o in orders:
+        print('USER: ', [o.ordered_by,request.user.username])
+        if request.user.username in see_all_check:
+            filter_order.append(o)
+            all_cost.append(o.total_cost)
+        elif o.ordered_by.username == request.user.username:
+            filter_order.append(o)
+            all_cost.append(o.total_cost)
+    
+    sumtotal = len(filter_order)
+    total_cost = sum(all_cost)
+    print(sumtotal,total_cost)
     
     # นับจำนวนตามสถานะ
     status_counts = MaterialOrder.objects.aggregate(
@@ -28,10 +45,12 @@ def home(request):
         approved=Count('id', filter=Q(approval_status='approved')),
         rejected=Count('id', filter=Q(approval_status='rejected'))
     )
-    
+    # {% if order.ordered_by.username == request.user.username %}
     return render(request, 'inventory/home.html', {
-        'orders': orders,
-        'status_counts': status_counts
+        'orders': filter_order,
+        'status_counts': status_counts,
+        'total_order': sumtotal,
+        'total_cost': total_cost
     })
 
 

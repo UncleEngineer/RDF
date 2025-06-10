@@ -14,10 +14,16 @@
   <div class="container-fluid">
     <a class="navbar-brand" href="{% url 'home' %}">RotideForest</a>
     <div>
+
+
+      {% if request.user.username == 'admin' %}
         <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Dashboard</a>
       <a href="/import" class="btn btn-outline-light btn-sm">Import</a>
       <a href="/order" class="btn btn-outline-light btn-sm">Order</a>
       <a href="/materials" class="btn btn-outline-light btn-sm">Material CRUD</a>
+
+      {% endif %}
+
       <a href="/logout" class="btn btn-outline-warning btn-sm">Logout</a>
     </div>
   </div>
