@@ -23,11 +23,11 @@ def home(request):
     filter_order = []
     all_cost = []
 
-    see_all_check = ['admin','admin2','area_manager','coo','ceo']
+    admin_list = ['admin','admin2','area_manager','coo','ceo']
 
     for o in orders:
         print('USER: ', [o.ordered_by,request.user.username])
-        if request.user.username in see_all_check:
+        if request.user.username in admin_list:
             filter_order.append(o)
             all_cost.append(o.total_cost)
         elif o.ordered_by.username == request.user.username:
