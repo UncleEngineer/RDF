@@ -95,7 +95,7 @@
         </td>
         <td>
           <div class="btn-group btn-group-sm" role="group">
-            {% if order.approval_status == 'pending' %}
+            {% if order.approval_status == 'approved' %}
               <a href="{% url 'order_edit' order.id %}" class="btn btn-primary" title="แก้ไข">
                 ✏️
               </a>
