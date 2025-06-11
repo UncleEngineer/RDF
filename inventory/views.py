@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
 from .models import *
@@ -16,7 +16,8 @@ import pandas as pd
 from django.utils import timezone
 from django.contrib import messages
 from django.db.models import Count, Q
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from collections import defaultdict
 
 @login_required
 def custom_logout(request):
@@ -33,7 +34,7 @@ def home(request):
     orders = MaterialOrder.objects.all().order_by('-created_at')
     
     # Admin user list
-    admin_list = ['admin', 'admin2', 'area_manager', 'coo', 'ceo']
+    admin_list = ['admin', 'admin2', 'area_manager', 'coo', 'ceo','KITCHEN_CENTRAL']
     
     # Get filter parameters
     date_from = request.GET.get('date_from')
@@ -370,3 +371,161 @@ def order_material(request):
         'order_id': f"{next_id:05d}",
         'delivery_rounds': delivery_rounds
     })
+
+
+
+
+
+# Staff check function
+def is_staff_user(user):
+    """Check if user is staff"""
+    return user.is_authenticated and user.is_staff
+
+@login_required
+@user_passes_test(is_staff_user, login_url='home')
+def material_summary(request):
+    """
+    Summary page for MaterialOrderItems grouped by material
+    Only accessible by staff users
+    """
+    
+    # Get filter parameters
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    selected_round_ids = request.GET.getlist('delivery_rounds')
+    
+    # Set default dates (last 7 days)
+    if not date_from:
+        date_from = (date.today() - timedelta(days=7)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = date.today().strftime('%Y-%m-%d')
+    
+    # Get all delivery rounds
+    delivery_rounds = DeliveryRound.objects.filter(is_active=True).order_by('name')
+    
+    # If no delivery rounds selected, select all
+    if not selected_round_ids:
+        selected_round_ids = [str(round.id) for round in delivery_rounds]
+    
+    # Convert to integers
+    selected_round_ids = [int(id) for id in selected_round_ids if id.isdigit()]
+    
+    # Build active filters list
+    active_filters = []
+    summary_data = []
+    total_materials = 0
+    total_quantity = 0
+    total_cost = 0
+    total_users = 0
+    
+    try:
+        # Parse dates
+        from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+        to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+        
+        active_filters.append(f'ช่วงวันที่: {from_date.strftime("%d/%m/%Y")} - {to_date.strftime("%d/%m/%Y")}')
+        
+        # Add delivery round filter info
+        if len(selected_round_ids) == delivery_rounds.count():
+            active_filters.append('รอบจัดส่ง: ทั้งหมด')
+        else:
+            selected_rounds = delivery_rounds.filter(id__in=selected_round_ids)
+            round_names = [round.name for round in selected_rounds]
+            active_filters.append(f'รอบจัดส่ง: {", ".join(round_names)}')
+        
+        # Base queryset for MaterialOrderItems
+        items = MaterialOrderItem.objects.select_related(
+            'material', 'order__ordered_by', 'order__delivery_round'
+        ).filter(
+            order__created_at__date__gte=from_date,
+            order__created_at__date__lte=to_date,
+            order__approval_status='approved'  # Only approved orders
+        )
+        
+        # Filter by delivery rounds
+        if selected_round_ids:
+            items = items.filter(order__delivery_round_id__in=selected_round_ids)
+        
+        # Group data by material
+        material_data = defaultdict(lambda: {
+            'total_quantity': 0,
+            'total_cost': 0,
+            'users': defaultdict(lambda: {'quantity': 0, 'cost': 0}),
+            'material_info': None
+        })
+        
+        # Process each item
+        for item in items:
+            material_id = item.material.id
+            username = item.order.ordered_by.username
+            
+            # Store material info
+            if not material_data[material_id]['material_info']:
+                material_data[material_id]['material_info'] = {
+                    'code': item.material.code,
+                    'name': item.material.name,
+                    'unit': item.material.unit,
+                }
+            
+            # Aggregate quantities and costs
+            material_data[material_id]['total_quantity'] += item.quantity
+            material_data[material_id]['total_cost'] += item.total_cost
+            material_data[material_id]['users'][username]['quantity'] += item.quantity
+            material_data[material_id]['users'][username]['cost'] += item.total_cost
+        
+        # Convert to list format for template
+        for material_id, data in material_data.items():
+            user_details = []
+            for username, user_data in data['users'].items():
+                user_details.append({
+                    'username': username,
+                    'quantity': user_data['quantity'],
+                    'cost': user_data['cost']
+                })
+            
+            # Sort users by quantity (descending)
+            user_details.sort(key=lambda x: x['quantity'], reverse=True)
+            
+            summary_data.append({
+                'material_code': data['material_info']['code'],
+                'material_name': data['material_info']['name'],
+                'unit': data['material_info']['unit'],
+                'total_quantity': data['total_quantity'],
+                'total_cost': data['total_cost'],
+                'user_count': len(data['users']),
+                'user_details': user_details
+            })
+        
+        # Sort by total quantity (descending)
+        summary_data.sort(key=lambda x: x['total_quantity'], reverse=True)
+        
+        # Calculate totals
+        total_materials = len(summary_data)
+        total_quantity = sum(item['total_quantity'] for item in summary_data)
+        total_cost = sum(item['total_cost'] for item in summary_data)
+        
+        # Count unique users
+        all_users = set()
+        for data in material_data.values():
+            all_users.update(data['users'].keys())
+        total_users = len(all_users)
+        
+    except ValueError as e:
+        messages.error(request, 'รูปแบบวันที่ไม่ถูกต้อง')
+    except Exception as e:
+        messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    context = {
+        'summary_data': summary_data,
+        'delivery_rounds': delivery_rounds,
+        'selected_rounds': selected_round_ids,
+        'active_filters': active_filters,
+        'default_date_from': date_from,
+        'default_date_to': date_to,
+        'total_materials': total_materials,
+        'total_quantity': total_quantity,
+        'total_cost': total_cost,
+        'total_users': total_users,
+    }
+    
+    return render(request, 'inventory/material_summary.html', context)

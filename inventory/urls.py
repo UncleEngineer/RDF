@@ -7,6 +7,8 @@ urlpatterns = [
     
     path('dashboard/', views.dashboard, name='dashboard'),
 
+    path('material-summary/', views.material_summary, name='material_summary'),
+
     # CRUD Material
     path('materials/', views.material_list, name='material_list'),
     path('materials/create/', views.material_create, name='material_create'),
