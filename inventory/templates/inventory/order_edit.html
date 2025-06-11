@@ -1,34 +1,492 @@
 {% extends 'inventory/base.html' %}
 {% block title %}แก้ไขรายการสั่งวัตถุดิบ{% endblock %}
+
 {% block content %}
-<h2>✏️ แก้ไขรายการสั่งวัตถุดิบ MOD-{{ order.id|stringformat:"05d" }}</h2>
-<form method="post">
-  {% csrf_token %}
-  <div class="mb-3">
-    <label class="form-label">หมายเหตุ</label>
-    <textarea name="note" class="form-control" rows="2">{{ order.note }}</textarea>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2>✏️ แก้ไขรายการสั่งวัตถุดิบ MOD-{{ order.id|stringformat:"05d" }}</h2>
+  <div>
+    {% if order.approval_status == 'pending' %}
+      <span class="badge bg-warning fs-6">รออนุมัติ</span>
+    {% elif order.approval_status == 'approved' %}
+      <span class="badge bg-success fs-6">อนุมัติแล้ว</span>
+    {% elif order.approval_status == 'rejected' %}
+      <span class="badge bg-danger fs-6">ไม่อนุมัติ</span>
+    {% endif %}
   </div>
-  <table class="table table-bordered">
-    <thead class="table-secondary">
-      <tr>
-        <th>สินค้า</th>
-        <th>ต้นทุน</th>
-        <th>จำนวน</th>
-        <th>รวม</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in order.items.all %}
-      <tr>
-        <td>{{ item.material.name }}</td>
-        <td><input type="number" step="0.01" name="cost_{{ item.id }}" value="{{ item.unit_cost }}" class="form-control"></td>
-        <td><input type="number" name="qty_{{ item.id }}" value="{{ item.quantity }}" class="form-control"></td>
-        <td>{{ item.total_cost|floatformat:2 }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <button type="submit" class="btn btn-primary">💾 บันทึกการเปลี่ยนแปลง</button>
-  <a href="{% url 'home' %}" class="btn btn-secondary">ย้อนกลับ</a>
+</div>
+
+<!-- แสดง Messages -->
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<!-- Order Information Card -->
+<div class="card mb-4">
+  <div class="card-header bg-info text-white">
+    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>ข้อมูลออร์เดอร์</h5>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-3">
+        <strong>รหัสออร์เดอร์:</strong><br>
+        <span class="badge bg-primary fs-6">MOD-{{ order.id|stringformat:"05d" }}</span>
+      </div>
+      <div class="col-md-3">
+        <strong>ผู้สั่ง:</strong><br>
+        <span class="text-primary">{{ order.ordered_by.username }}</span>
+      </div>
+      <div class="col-md-3">
+        <strong>วันที่สั่ง:</strong><br>
+        {{ order.created_at|date:"d/m/Y H:i" }}
+      </div>
+      <div class="col-md-3">
+        <strong>แก้ไขล่าสุด:</strong><br>
+        {{ order.updated_at|date:"d/m/Y H:i" }}
+      </div>
+    </div>
+    <hr>
+    <div class="row">
+      <div class="col-md-4">
+        <strong>สถานะอนุมัติ:</strong><br>
+        {% if order.approval_status == 'pending' %}
+          <span class="badge bg-warning">รออนุมัติ</span>
+        {% elif order.approval_status == 'approved' %}
+          <span class="badge bg-success">อนุมัติแล้ว</span>
+        {% elif order.approval_status == 'rejected' %}
+          <span class="badge bg-danger">ไม่อนุมัติ</span>
+        {% endif %}
+      </div>
+      <div class="col-md-4">
+        <strong>ผู้อนุมัติ:</strong><br>
+        {% if order.approved_by %}
+          {{ order.approved_by.username }}
+          {% if order.approved_at %}
+            <br><small class="text-muted">{{ order.approved_at|date:"d/m/Y H:i" }}</small>
+          {% endif %}
+        {% else %}
+          <span class="text-muted">-</span>
+        {% endif %}
+      </div>
+      <div class="col-md-4">
+        <strong>มูลค่ารวมปัจจุบัน:</strong><br>
+        <span class="text-primary fs-5 fw-bold" id="currentTotal">{{ order.total_cost|floatformat:2 }}</span> บาท
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" id="orderEditForm">
+  {% csrf_token %}
+  
+  <!-- Order Details Section -->
+  <div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-edit me-2"></i>รายละเอียดออร์เดอร์</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <!-- Delivery Round -->
+        <div class="col-md-6 mb-3">
+          <label for="delivery_round" class="form-label">
+            <i class="fas fa-truck me-2"></i>รอบจัดส่ง
+          </label>
+          <select class="form-select" id="delivery_round" name="delivery_round">
+            <option value="">-- เลือกรอบจัดส่ง --</option>
+            {% for round in delivery_rounds %}
+              <option value="{{ round.id }}" 
+                      {% if order.delivery_round and order.delivery_round.id == round.id %}selected{% endif %}>
+                {{ round.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <!-- Approval Status (for admin/staff) -->
+        {% if user.is_staff %}
+        <div class="col-md-6 mb-3">
+          <label for="approval_status" class="form-label">
+            <i class="fas fa-check-circle me-2"></i>สถานะอนุมัติ
+          </label>
+          <select class="form-select" id="approval_status" name="approval_status">
+            <option value="pending" {% if order.approval_status == 'pending' %}selected{% endif %}>รออนุมัติ</option>
+            <option value="approved" {% if order.approval_status == 'approved' %}selected{% endif %}>อนุมัติแล้ว</option>
+            <option value="rejected" {% if order.approval_status == 'rejected' %}selected{% endif %}>ไม่อนุมัติ</option>
+          </select>
+        </div>
+        {% endif %}
+        
+        <!-- Note -->
+        <div class="col-12 mb-3">
+          <label for="note" class="form-label">
+            <i class="fas fa-sticky-note me-2"></i>หมายเหตุ
+          </label>
+          <textarea id="note" name="note" class="form-control" rows="3" 
+                    placeholder="หมายเหตุเพิ่มเติมเกี่ยวกับออร์เดอร์...">{{ order.note }}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Material Items Section -->
+  <div class="card mb-4">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><i class="fas fa-list me-2"></i>รายการวัตถุดิบ</h5>
+      <button type="button" class="btn btn-light btn-sm" onclick="addNewItem()">
+        <i class="fas fa-plus me-1"></i>เพิ่มรายการ
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <!-- Search for new materials -->
+      <div class="p-3 bg-light border-bottom">
+        <div class="row">
+          <div class="col-md-8">
+            <input type="text" id="searchBox" class="form-control" 
+                   placeholder="🔍 ค้นหาวัตถุดิบเพื่อเพิ่มรายการใหม่...">
+          </div>
+          <div class="col-md-4">
+            <button type="button" class="btn btn-outline-success w-100" onclick="toggleSearchResults()">
+              <i class="fas fa-search me-1"></i>ค้นหา
+            </button>
+          </div>
+        </div>
+        <ul id="search-results" class="list-group mt-2" style="display: none;"></ul>
+      </div>
+      
+      <!-- Materials Table -->
+      <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0" id="materialsTable">
+          <thead class="table-dark">
+            <tr>
+              <th width="5%">#</th>
+              <th width="20%">รหัส/ชื่อวัตถุดิบ</th>
+              <th width="10%">หน่วย</th>
+              <th width="15%">ต้นทุน/หน่วย</th>
+              <th width="10%">จำนวน</th>
+              <th width="15%">รวม</th>
+              <th width="15%">หมายเหตุรายการ</th>
+              <th width="10%">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in order.items.all %}
+            <tr data-item-id="{{ item.id }}">
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <strong>{{ item.material.code }}</strong><br>
+                <small class="text-muted">{{ item.material.name }}</small>
+              </td>
+              <td>{{ item.material.unit }}</td>
+              <td>
+                <input type="number" 
+                       step="0.01" 
+                       name="cost_{{ item.id }}" 
+                       value="{{ item.unit_cost }}" 
+                       class="form-control item-cost"
+                       min="0"
+                       onchange="updateItemTotal(this)" readonly>
+              </td>
+              <td>
+                <input type="number" 
+                       name="qty_{{ item.id }}" 
+                       value="{{ item.quantity }}" 
+                       class="form-control item-quantity"
+                       min="1"
+                       onchange="updateItemTotal(this)">
+              </td>
+              <td>
+                <span class="fw-bold text-success item-total">{{ item.total_cost|floatformat:2 }}</span> บาท
+              </td>
+              <td>
+                <input type="text" 
+                       name="note_{{ item.id }}" 
+                       value="{{ item.note|default:'' }}" 
+                       class="form-control form-control-sm"
+                       placeholder="หมายเหตุ...">
+              </td>
+              <td>
+                <button type="button" class="btn btn-danger btn-sm" 
+                        onclick="removeItem({{ item.id }})"
+                        title="ลบรายการ">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot class="table-light">
+            <tr>
+              <td colspan="5" class="text-end"><strong>รวมทั้งหมด:</strong></td>
+              <td><strong class="text-primary fs-5" id="grandTotal">{{ order.total_cost|floatformat:2 }}</strong> บาท</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden fields for new items -->
+  <div id="hiddenFields"></div>
+
+  <!-- Action Buttons -->
+  <div class="d-flex gap-2 justify-content-end">
+    <a href="{% url 'home' %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left me-1"></i>ยกเลิก
+    </a>
+    
+    <button type="button" class="btn btn-warning" onclick="resetForm()">
+      <i class="fas fa-undo me-1"></i>รีเซ็ต
+    </button>
+    
+    <button type="submit" class="btn btn-success">
+      <i class="fas fa-save me-1"></i>บันทึกการเปลี่ยนแปลง
+    </button>
+  </div>
 </form>
+
+<!-- Change Log (if needed) -->
+<div class="card mt-4">
+  <div class="card-header bg-secondary text-white">
+    <h6 class="mb-0"><i class="fas fa-history me-2"></i>ข้อมูลการเปลี่ยนแปลง</h6>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6">
+        <small class="text-muted">สร้างเมื่อ: {{ order.created_at|date:"d/m/Y H:i:s" }}</small>
+      </div>
+      <div class="col-md-6">
+        <small class="text-muted">แก้ไขล่าสุด: {{ order.updated_at|date:"d/m/Y H:i:s" }}</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let removedItems = new Set();
+let newItemCounter = 0;
+
+// Update item total calculation
+function updateItemTotal(input) {
+  const row = input.closest('tr');
+  const costInput = row.querySelector('.item-cost');
+  const qtyInput = row.querySelector('.item-quantity');
+  const totalSpan = row.querySelector('.item-total');
+  
+  const cost = parseFloat(costInput.value) || 0;
+  const qty = parseInt(qtyInput.value) || 0;
+  const total = cost * qty;
+  
+  totalSpan.textContent = total.toFixed(2);
+  updateGrandTotal();
+}
+
+// Update grand total
+function updateGrandTotal() {
+  let grandTotal = 0;
+  document.querySelectorAll('.item-total').forEach(span => {
+    const value = parseFloat(span.textContent) || 0;
+    grandTotal += value;
+  });
+  
+  document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
+}
+
+// Remove item
+function removeItem(itemId) {
+  if (confirm('คุณต้องการลบรายการนี้หรือไม่?')) {
+    const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (row) {
+      row.style.display = 'none';
+      removedItems.add(itemId);
+      
+      // Add hidden field to track removed items
+      const hiddenField = document.createElement('input');
+      hiddenField.type = 'hidden';
+      hiddenField.name = 'removed_items';
+      hiddenField.value = itemId;
+      document.getElementById('hiddenFields').appendChild(hiddenField);
+      
+      updateGrandTotal();
+      updateRowNumbers();
+    }
+  }
+}
+
+// Update row numbers
+function updateRowNumbers() {
+  const visibleRows = document.querySelectorAll('#materialsTable tbody tr:not([style*="display: none"])');
+  visibleRows.forEach((row, index) => {
+    row.cells[0].textContent = index + 1;
+  });
+}
+
+// Search materials
+document.getElementById('searchBox').addEventListener('input', function() {
+  const query = this.value;
+  if (query.length < 2) {
+    document.getElementById('search-results').style.display = 'none';
+    return;
+  }
+  
+  fetch(`/search/?q=${encodeURIComponent(query)}`)
+    .then(res => res.json())
+    .then(data => {
+      const searchResults = document.getElementById('search-results');
+      searchResults.innerHTML = '';
+      
+      if (data.length === 0) {
+        searchResults.innerHTML = '<li class="list-group-item">ไม่พบรายการ</li>';
+      } else {
+        data.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+          li.style.cursor = 'pointer';
+          li.innerHTML = `
+            <div>
+              <strong>${item.name}</strong> (${item.code})<br>
+              <small class="text-muted">หน่วย: ${item.unit || '-'}</small>
+            </div>
+            <span class="badge bg-secondary">${item.cost} บาท</span>
+          `;
+          li.onclick = () => addMaterial(item);
+          searchResults.appendChild(li);
+        });
+      }
+      searchResults.style.display = 'block';
+    })
+    .catch(error => {
+      console.error('Error:', error);
+    });
+});
+
+// Toggle search results
+function toggleSearchResults() {
+  const searchResults = document.getElementById('search-results');
+  searchResults.style.display = searchResults.style.display === 'none' ? 'block' : 'none';
+}
+
+// Add new material to order
+function addMaterial(material) {
+  newItemCounter++;
+  const tbody = document.querySelector('#materialsTable tbody');
+  const newRow = document.createElement('tr');
+  newRow.setAttribute('data-new-item', newItemCounter);
+  
+  newRow.innerHTML = `
+    <td>${tbody.children.length + 1}</td>
+    <td>
+      <strong>${material.code}</strong><br>
+      <small class="text-muted">${material.name}</small>
+      <input type="hidden" name="new_material_${newItemCounter}" value="${material.id}">
+    </td>
+    <td>${material.unit || '-'}</td>
+    <td>
+      <input type="number" 
+             step="0.01" 
+             name="new_cost_${newItemCounter}" 
+             value="${material.cost}" 
+             class="form-control item-cost"
+             min="0"
+             onchange="updateItemTotal(this)">
+    </td>
+    <td>
+      <input type="number" 
+             name="new_qty_${newItemCounter}" 
+             value="1" 
+             class="form-control item-quantity"
+             min="1"
+             onchange="updateItemTotal(this)">
+    </td>
+    <td>
+      <span class="fw-bold text-success item-total">${material.cost}</span> บาท
+    </td>
+    <td>
+      <input type="text" 
+             name="new_note_${newItemCounter}" 
+             class="form-control form-control-sm"
+             placeholder="หมายเหตุ...">
+    </td>
+    <td>
+      <button type="button" class="btn btn-danger btn-sm" 
+              onclick="removeNewItem(${newItemCounter})"
+              title="ลบรายการ">
+        <i class="fas fa-trash"></i>
+      </button>
+    </td>
+  `;
+  
+  tbody.appendChild(newRow);
+  updateGrandTotal();
+  updateRowNumbers();
+  
+  // Clear search
+  document.getElementById('searchBox').value = '';
+  document.getElementById('search-results').style.display = 'none';
+}
+
+// Remove new item
+function removeNewItem(counter) {
+  if (confirm('คุณต้องการลบรายการนี้หรือไม่?')) {
+    const row = document.querySelector(`tr[data-new-item="${counter}"]`);
+    if (row) {
+      row.remove();
+      updateGrandTotal();
+      updateRowNumbers();
+    }
+  }
+}
+
+// Reset form
+function resetForm() {
+  if (confirm('คุณต้องการรีเซ็ตฟอร์มหรือไม่? การเปลี่ยนแปลงทั้งหมดจะหายไป')) {
+    location.reload();
+  }
+}
+
+// Form validation
+document.getElementById('orderEditForm').addEventListener('submit', function(e) {
+  const visibleRows = document.querySelectorAll('#materialsTable tbody tr:not([style*="display: none"])');
+  if (visibleRows.length === 0) {
+    e.preventDefault();
+    alert('กรุณาเพิ่มรายการวัตถุดิบอย่างน้อย 1 รายการ');
+    return;
+  }
+  
+  // Validate quantities and costs
+  let hasError = false;
+  visibleRows.forEach(row => {
+    const qtyInput = row.querySelector('.item-quantity');
+    const costInput = row.querySelector('.item-cost');
+    
+    if (!qtyInput.value || parseInt(qtyInput.value) < 1) {
+      alert('จำนวนต้องมากกว่า 0');
+      qtyInput.focus();
+      hasError = true;
+      return;
+    }
+    
+    if (!costInput.value || parseFloat(costInput.value) < 0) {
+      alert('ต้นทุนต้องมากกว่าหรือเท่ากับ 0');
+      costInput.focus();
+      hasError = true;
+      return;
+    }
+  });
+  
+  if (hasError) {
+    e.preventDefault();
+  }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  updateGrandTotal();
+});
+</script>
 {% endblock %}

@@ -110,11 +110,12 @@ class MaterialOrder(models.Model):
 
 
 class MaterialOrderItem(models.Model):
-    order = models.ForeignKey(MaterialOrder, related_name='items', on_delete=models.CASCADE)
-    material = models.ForeignKey(MaterialStock, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
-    unit_cost = models.FloatField()
-    total_cost = models.FloatField()
+   order = models.ForeignKey(MaterialOrder, related_name='items', on_delete=models.CASCADE)
+   material = models.ForeignKey(MaterialStock, on_delete=models.CASCADE)
+   quantity = models.PositiveIntegerField()
+   unit_cost = models.FloatField()
+   total_cost = models.FloatField()
+   note = models.TextField(blank=True, verbose_name="หมายเหตุรายการ")  # Add this
 
-    def __str__(self):
-        return f"{self.material.name} x {self.quantity}"
+   def __str__(self):
+       return f"{self.material.name} x {self.quantity}"

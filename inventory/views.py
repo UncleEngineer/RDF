@@ -245,25 +245,144 @@ def material_delete(request, pk):
     return render(request, 'inventory/material_confirm_delete.html', {'material': material})
 
 
+
 @login_required
 def order_edit(request, pk):
+    """Enhanced order edit with full functionality"""
     order = get_object_or_404(MaterialOrder, pk=pk)
-    if request.method == 'POST':
-        note = request.POST.get('note', '')
-        total = 0
-        for item in order.items.all():
-            qty = int(request.POST.get(f'qty_{item.id}', item.quantity))
-            cost = float(request.POST.get(f'cost_{item.id}', item.unit_cost))
-            item.quantity = qty
-            item.unit_cost = cost
-            item.total_cost = qty * cost
-            item.save()
-            total += item.total_cost
-        order.note = note
-        order.total_cost = total
-        order.save()
+    
+    # Check permissions - only order owner or staff can edit
+    if not (request.user == order.ordered_by or request.user.is_staff):
+        messages.error(request, 'คุณไม่มีสิทธิ์แก้ไขออร์เดอร์นี้')
         return redirect('home')
-    return render(request, 'inventory/order_edit.html', {'order': order})
+    
+    if request.method == 'POST':
+        try:
+            # Get form data
+            note = request.POST.get('note', '').strip()
+            delivery_round_id = request.POST.get('delivery_round')
+            approval_status = request.POST.get('approval_status')
+            
+            # Update basic order info
+            order.note = note
+            
+            # Update delivery round
+            if delivery_round_id:
+                try:
+                    delivery_round = DeliveryRound.objects.get(pk=delivery_round_id)
+                    order.delivery_round = delivery_round
+                except DeliveryRound.DoesNotExist:
+                    pass
+            else:
+                order.delivery_round = None
+            
+            # Update approval status (only for staff)
+            if request.user.is_staff and approval_status:
+                old_status = order.approval_status
+                order.approval_status = approval_status
+                
+                # Set approval info based on status change
+                if approval_status == 'approved' and old_status != 'approved':
+                    order.approved_by = request.user
+                    order.approved_at = timezone.now()
+                elif approval_status == 'rejected' and old_status != 'rejected':
+                    order.approved_by = request.user
+                    order.approved_at = timezone.now()
+                elif approval_status == 'pending':
+                    order.approved_by = None
+                    order.approved_at = None
+            
+            # Handle removed items
+            removed_items = request.POST.getlist('removed_items')
+            for item_id in removed_items:
+                try:
+                    item = MaterialOrderItem.objects.get(id=item_id, order=order)
+                    item.delete()
+                except MaterialOrderItem.DoesNotExist:
+                    pass
+            
+            # Update existing items
+            total_cost = 0
+            for item in order.items.all():
+                qty_key = f'qty_{item.id}'
+                cost_key = f'cost_{item.id}'
+                note_key = f'note_{item.id}'
+                
+                if qty_key in request.POST and cost_key in request.POST:
+                    try:
+                        quantity = int(request.POST[qty_key])
+                        unit_cost = float(request.POST[cost_key])
+                        item_note = request.POST.get(note_key, '').strip()
+                        
+                        if quantity > 0 and unit_cost >= 0:
+                            item.quantity = quantity
+                            item.unit_cost = unit_cost
+                            item.total_cost = quantity * unit_cost
+                            
+                            # Add note field to MaterialOrderItem if it doesn't exist
+                            # You might need to add this field to your model
+                            if hasattr(item, 'note'):
+                                item.note = item_note
+                            
+                            item.save()
+                            total_cost += item.total_cost
+                        else:
+                            messages.warning(request, f'ข้อมูลไม่ถูกต้องสำหรับรายการ {item.material.name}')
+                    except (ValueError, TypeError):
+                        messages.warning(request, f'ข้อมูลไม่ถูกต้องสำหรับรายการ {item.material.name}')
+            
+            # Add new items
+            new_item_counter = 1
+            while f'new_material_{new_item_counter}' in request.POST:
+                try:
+                    material_id = request.POST[f'new_material_{new_item_counter}']
+                    quantity = int(request.POST[f'new_qty_{new_item_counter}'])
+                    unit_cost = float(request.POST[f'new_cost_{new_item_counter}'])
+                    item_note = request.POST.get(f'new_note_{new_item_counter}', '').strip()
+                    
+                    if quantity > 0 and unit_cost >= 0:
+                        material = MaterialStock.objects.get(pk=material_id)
+                        item_total = quantity * unit_cost
+                        
+                        new_item = MaterialOrderItem.objects.create(
+                            order=order,
+                            material=material,
+                            quantity=quantity,
+                            unit_cost=unit_cost,
+                            total_cost=item_total
+                        )
+                        
+                        # Add note if the field exists
+                        if hasattr(new_item, 'note'):
+                            new_item.note = item_note
+                            new_item.save()
+                        
+                        total_cost += item_total
+                    
+                except (ValueError, TypeError, MaterialStock.DoesNotExist):
+                    messages.warning(request, f'ไม่สามารถเพิ่มรายการใหม่ลำดับที่ {new_item_counter} ได้')
+                
+                new_item_counter += 1
+            
+            # Update order total
+            order.total_cost = total_cost
+            order.save()
+            
+            messages.success(request, f'แก้ไขออร์เดอร์ MOD-{order.id:05d} เรียบร้อยแล้ว')
+            return redirect('home')
+            
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    # Get delivery rounds for the form
+    delivery_rounds = DeliveryRound.objects.filter(is_active=True).order_by('name')
+    
+    context = {
+        'order': order,
+        'delivery_rounds': delivery_rounds,
+    }
+    
+    return render(request, 'inventory/order_edit.html', context)
 
 @login_required
 def order_delete(request, pk):
