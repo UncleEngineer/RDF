@@ -78,7 +78,7 @@ class MaterialOrder(models.Model):
     approval_status = models.CharField(
         max_length=20, 
         choices=APPROVAL_STATUS_CHOICES, 
-        default='pending',
+        default='approved',
         verbose_name="สถานะอนุมัติ"
     )
     approved_by = models.ForeignKey(

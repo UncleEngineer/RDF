@@ -18,6 +18,15 @@ from django.contrib import messages
 from django.db.models import Count, Q
 
 @login_required
+def custom_logout(request):
+    username = request.user.username
+    logout(request)
+    messages.success(request, f'คุณ {username} ได้ออกจากระบบเรียบร้อยแล้ว')
+    return redirect('login')
+
+
+
+@login_required
 def home(request):
     orders = MaterialOrder.objects.all().order_by('-created_at')
     filter_order = []

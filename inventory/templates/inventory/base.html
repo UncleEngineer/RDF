@@ -17,13 +17,13 @@
 
 
       {% if request.user.username == 'admin' %}
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Dashboard</a>
-      <a href="/import" class="btn btn-outline-light btn-sm">Import</a>
-      <a href="/order" class="btn btn-outline-light btn-sm">Order</a>
-      <a href="/materials" class="btn btn-outline-light btn-sm">Material CRUD</a>
+        {% comment %} <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">สรุปการสั่ง</a> {% endcomment %}
+      {% comment "" %}<a href="/import" class="btn btn-outline-light btn-sm">Import</a>{% endcomment %}
+      <a href="/order" class="btn btn-outline-light btn-sm">สั่งออร์เดอร์</a>
+      <a href="/materials" class="btn btn-outline-light btn-sm">วัตถุดิบทั้งหมด</a>
 
       {% endif %}
-
+      <a href="/order" class="btn btn-outline-light btn-sm">สั่งออร์เดอร์</a>
       <a href="/logout" class="btn btn-outline-warning btn-sm">Logout</a>
     </div>
   </div>
