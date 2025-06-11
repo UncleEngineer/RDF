@@ -26,4 +26,12 @@ urlpatterns = [
     path('order/<int:pk>/edit/', views.order_edit, name='order_edit'),
     path('order/<int:pk>/delete/', views.order_delete, name='order_delete'),
 
+    # Delivery Round CRUD (Superuser only) - NEW URLS
+    path('delivery-rounds/', views.delivery_round_list, name='delivery_round_list'),
+    path('delivery-rounds/create/', views.delivery_round_create, name='delivery_round_create'),
+    path('delivery-rounds/<int:pk>/edit/', views.delivery_round_edit, name='delivery_round_edit'),
+    path('delivery-rounds/<int:pk>/delete/', views.delivery_round_delete, name='delivery_round_delete'),
+    path('delivery-rounds/<int:pk>/toggle/', views.delivery_round_toggle, name='delivery_round_toggle'),
+
+
 ]

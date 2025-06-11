@@ -19,6 +19,11 @@ from django.db.models import Count, Q
 from datetime import datetime, timedelta, date
 from collections import defaultdict
 
+# Superuser check function
+def is_superuser(user):
+    """Check if user is superuser"""
+    return user.is_authenticated and user.is_superuser
+
 @login_required
 def custom_logout(request):
     username = request.user.username
@@ -529,3 +534,208 @@ def material_summary(request):
     }
     
     return render(request, 'inventory/material_summary.html', context)
+
+
+
+
+
+
+
+# ============================================================================
+# DELIVERY ROUND CRUD VIEWS (Superuser only)
+# ============================================================================
+
+@login_required
+@user_passes_test(is_superuser, login_url='home')
+def delivery_round_list(request):
+    """List all delivery rounds - Superuser only"""
+    
+    delivery_rounds = DeliveryRound.objects.all().order_by('-created_at')
+    
+    # Calculate statistics
+    total_rounds = delivery_rounds.count()
+    active_rounds = delivery_rounds.filter(is_active=True).count()
+    inactive_rounds = total_rounds - active_rounds
+    
+    # Count total orders using delivery rounds
+    total_orders = MaterialOrder.objects.filter(delivery_round__isnull=False).count()
+    
+    context = {
+        'delivery_rounds': delivery_rounds,
+        'total_rounds': total_rounds,
+        'active_rounds': active_rounds,
+        'inactive_rounds': inactive_rounds,
+        'total_orders': total_orders,
+    }
+    
+    return render(request, 'inventory/delivery_round_list.html', context)
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='home')
+def delivery_round_create(request):
+    """Create new delivery round - Superuser only"""
+    
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        is_active = request.POST.get('is_active') == 'on'
+        
+        # Validation
+        if not name:
+            messages.error(request, 'กรุณาระบุชื่อรอบจัดส่ง')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'เพิ่มรอบจัดส่งใหม่'
+            })
+        
+        if len(name) < 3:
+            messages.error(request, 'ชื่อรอบจัดส่งต้องมีอย่างน้อย 3 ตัวอักษร')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'เพิ่มรอบจัดส่งใหม่'
+            })
+        
+        if len(name) > 100:
+            messages.error(request, 'ชื่อรอบจัดส่งต้องไม่เกิน 100 ตัวอักษร')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'เพิ่มรอบจัดส่งใหม่'
+            })
+        
+        # Check for duplicate name
+        if DeliveryRound.objects.filter(name=name).exists():
+            messages.error(request, f'รอบจัดส่งชื่อ "{name}" มีอยู่แล้ว กรุณาใช้ชื่ออื่น')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'เพิ่มรอบจัดส่งใหม่'
+            })
+        
+        try:
+            # Create delivery round
+            delivery_round = DeliveryRound.objects.create(
+                name=name,
+                description=description,
+                is_active=is_active
+            )
+            
+            messages.success(request, f'สร้างรอบจัดส่ง "{delivery_round.name}" เรียบร้อยแล้ว')
+            return redirect('delivery_round_list')
+            
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    return render(request, 'inventory/delivery_round_form.html', {
+        'title': 'เพิ่มรอบจัดส่งใหม่'
+    })
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='home')
+def delivery_round_edit(request, pk):
+    """Edit delivery round - Superuser only"""
+    
+    delivery_round = get_object_or_404(DeliveryRound, pk=pk)
+    
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        is_active = request.POST.get('is_active') == 'on'
+        
+        # Validation
+        if not name:
+            messages.error(request, 'กรุณาระบุชื่อรอบจัดส่ง')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'แก้ไขรอบจัดส่ง',
+                'delivery_round': delivery_round
+            })
+        
+        if len(name) < 3:
+            messages.error(request, 'ชื่อรอบจัดส่งต้องมีอย่างน้อย 3 ตัวอักษร')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'แก้ไขรอบจัดส่ง',
+                'delivery_round': delivery_round
+            })
+        
+        if len(name) > 100:
+            messages.error(request, 'ชื่อรอบจัดส่งต้องไม่เกิน 100 ตัวอักษร')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'แก้ไขรอบจัดส่ง',
+                'delivery_round': delivery_round
+            })
+        
+        # Check for duplicate name (excluding current record)
+        if DeliveryRound.objects.filter(name=name).exclude(pk=pk).exists():
+            messages.error(request, f'รอบจัดส่งชื่อ "{name}" มีอยู่แล้ว กรุณาใช้ชื่ออื่น')
+            return render(request, 'inventory/delivery_round_form.html', {
+                'title': 'แก้ไขรอบจัดส่ง',
+                'delivery_round': delivery_round
+            })
+        
+        try:
+            # Update delivery round
+            delivery_round.name = name
+            delivery_round.description = description
+            delivery_round.is_active = is_active
+            delivery_round.save()
+            
+            messages.success(request, f'แก้ไขรอบจัดส่ง "{delivery_round.name}" เรียบร้อยแล้ว')
+            return redirect('delivery_round_list')
+            
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    return render(request, 'inventory/delivery_round_form.html', {
+        'title': 'แก้ไขรอบจัดส่ง',
+        'delivery_round': delivery_round
+    })
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='home')
+def delivery_round_delete(request, pk):
+    """Delete delivery round - Superuser only"""
+    
+    delivery_round = get_object_or_404(DeliveryRound, pk=pk)
+    
+    # Check if delivery round is being used by any orders
+    related_orders = MaterialOrder.objects.filter(delivery_round=delivery_round)
+    order_count = related_orders.count()
+    
+    if request.method == 'POST':
+        if order_count > 0:
+            messages.error(request, f'ไม่สามารถลบรอบจัดส่ง "{delivery_round.name}" ได้ เนื่องจากมี {order_count} ออร์เดอร์ที่อ้างอิงถึงรอบนี้')
+            return redirect('delivery_round_delete', pk=pk)
+        
+        try:
+            delivery_round_name = delivery_round.name
+            delivery_round.delete()
+            messages.success(request, f'ลบรอบจัดส่ง "{delivery_round_name}" เรียบร้อยแล้ว')
+            return redirect('delivery_round_list')
+            
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    return render(request, 'inventory/delivery_round_delete.html', {
+        'delivery_round': delivery_round,
+        'order_count': order_count,
+        'related_orders': related_orders
+    })
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='home')
+def delivery_round_toggle(request, pk):
+    """Toggle active status of delivery round - Superuser only"""
+    
+    delivery_round = get_object_or_404(DeliveryRound, pk=pk)
+    
+    if request.method == 'POST':
+        try:
+            # Toggle active status
+            delivery_round.is_active = not delivery_round.is_active
+            delivery_round.save()
+            
+            status = 'เปิดใช้งาน' if delivery_round.is_active else 'ปิดใช้งาน'
+            messages.success(request, f'{status}รอบจัดส่ง "{delivery_round.name}" เรียบร้อยแล้ว')
+            
+        except Exception as e:
+            messages.error(request, f'เกิดข้อผิดพลาด: {str(e)}')
+    
+    return redirect('delivery_round_list')
