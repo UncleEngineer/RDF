@@ -16,6 +16,7 @@ import pandas as pd
 from django.utils import timezone
 from django.contrib import messages
 from django.db.models import Count, Q
+from datetime import datetime, timedelta
 
 @login_required
 def custom_logout(request):
@@ -28,39 +29,114 @@ def custom_logout(request):
 
 @login_required
 def home(request):
+    # Base queryset
     orders = MaterialOrder.objects.all().order_by('-created_at')
+    
+    # Admin user list
+    admin_list = ['admin', 'admin2', 'area_manager', 'coo', 'ceo']
+    
+    # Get filter parameters
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    delivery_round_id = request.GET.get('delivery_round')
+    ordered_by_id = request.GET.get('ordered_by')
+    status_filter = request.GET.get('status')
+    
+    # Build active filters list for display
+    active_filters = []
+    
+    # Apply date filters
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+            orders = orders.filter(created_at__date__gte=from_date)
+            active_filters.append(f'จากวันที่: {from_date.strftime("%d/%m/%Y")}')
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+            orders = orders.filter(created_at__date__lte=to_date)
+            active_filters.append(f'ถึงวันที่: {to_date.strftime("%d/%m/%Y")}')
+        except ValueError:
+            pass
+    
+    # Apply delivery round filter
+    if delivery_round_id:
+        try:
+            delivery_round = DeliveryRound.objects.get(pk=delivery_round_id)
+            orders = orders.filter(delivery_round=delivery_round)
+            active_filters.append(f'รอบจัดส่ง: {delivery_round.name}')
+        except DeliveryRound.DoesNotExist:
+            pass
+    
+    # Apply user filter (only for admin users)
+    if ordered_by_id and request.user.username in admin_list:
+        try:
+            ordered_by_user = User.objects.get(pk=ordered_by_id)
+            orders = orders.filter(ordered_by=ordered_by_user)
+            active_filters.append(f'ผู้สั่ง: {ordered_by_user.username}')
+        except User.DoesNotExist:
+            pass
+    
+    # Apply status filter
+    if status_filter:
+        orders = orders.filter(approval_status=status_filter)
+        status_names = {
+            'pending': 'รออนุมัติ',
+            'approved': 'อนุมัติแล้ว',
+            'rejected': 'ไม่อนุมัติ'
+        }
+        active_filters.append(f'สถานะ: {status_names.get(status_filter, status_filter)}')
+    
+    # Apply user access control (filter by user unless admin)
     filter_order = []
     all_cost = []
-
-    admin_list = ['admin','admin2','area_manager','coo','ceo']
-
+    
     for o in orders:
-        print('USER: ', [o.ordered_by,request.user.username])
         if request.user.username in admin_list:
             filter_order.append(o)
-            all_cost.append(o.total_cost)
+            all_cost.append(o.total_cost or 0)
         elif o.ordered_by.username == request.user.username:
             filter_order.append(o)
-            all_cost.append(o.total_cost)
+            all_cost.append(o.total_cost or 0)
     
+    # Calculate totals
     sumtotal = len(filter_order)
     total_cost = sum(all_cost)
-    print(sumtotal,total_cost)
     
-    # นับจำนวนตามสถานะ
-    status_counts = MaterialOrder.objects.aggregate(
+    # Get status counts for the filtered results
+    filtered_order_ids = [order.id for order in filter_order]
+    status_counts = MaterialOrder.objects.filter(id__in=filtered_order_ids).aggregate(
         total=Count('id'),
         pending=Count('id', filter=Q(approval_status='pending')),
         approved=Count('id', filter=Q(approval_status='approved')),
         rejected=Count('id', filter=Q(approval_status='rejected'))
     )
-    # {% if order.ordered_by.username == request.user.username %}
-    return render(request, 'inventory/home.html', {
+    
+    # Get data for filter dropdowns
+    delivery_rounds = DeliveryRound.objects.filter(is_active=True).order_by('name')
+    
+    # Get users for admin filter (only show users who have created orders)
+    users = []
+    if request.user.username in admin_list:
+        users = User.objects.filter(
+            materialorder__isnull=False
+        ).distinct().order_by('username')
+    
+    context = {
         'orders': filter_order,
         'status_counts': status_counts,
         'total_order': sumtotal,
-        'total_cost': total_cost
-    })
+        'total_cost': total_cost,
+        'delivery_rounds': delivery_rounds,
+        'users': users,
+        'admin_list': admin_list,
+        'active_filters': active_filters,
+    }
+    
+    return render(request, 'inventory/home.html', context)
 
 
 
@@ -100,71 +176,6 @@ def material_list(request):
     materials = MaterialStock.objects.all()
     return render(request, 'inventory/material_list.html', {'materials': materials})
 
-# หน้าออร์เดอร์สินค้า
-@login_required
-def order_material(request):
-    # 1-ปุ่มอนุมัติการสังซื้อ (user: area_manager)
-    # 2-รอบส่ง (รอบส่ง-หาดใหญ่-จันทร์ 2 มิถุนายน) (คนเพิ่มรอบส่ง: perchase_manager)
-    # 
-    if request.method == 'POST':
-        note = request.POST.get('note', '')
-        material_ids = request.POST.getlist('material_id')
-        qtys = request.POST.getlist('qty')
-        costs = request.POST.getlist('cost')
-
-        print(f"Material IDs: {material_ids}")
-        print(f"Quantities: {qtys}")
-        print(f"Costs: {costs}")
-
-        # ตรวจสอบว่ามีข้อมูลหรือไม่
-        if not material_ids:
-            return redirect('order_material')
-
-        # สร้าง order โดยไม่ต้องใส่ material (ถ้าใช้วิธี migration)
-        order = MaterialOrder.objects.create(
-            ordered_by=request.user,
-            note=note,
-            created_at=timezone.now(),
-            total_cost=0
-        )
-
-        print('Order created successfully')
-
-        total_cost = 0
-        for mid, qty, cost in zip(material_ids, qtys, costs):
-            try:
-                if not mid or not qty or not cost:
-                    continue  # ข้ามถ้าข้อมูลว่าง
-
-                mid = int(mid)
-                quantity = int(qty)
-                cost_value = float(cost)
-
-                material = MaterialStock.objects.get(pk=mid)
-                item_total = quantity * cost_value
-
-                MaterialOrderItem.objects.create(
-                    order=order,
-                    material=material,
-                    quantity=quantity,
-                    unit_cost=cost_value,
-                    total_cost=item_total
-                )
-                total_cost += item_total
-
-            except (ValueError, MaterialStock.DoesNotExist):
-                continue  # ข้ามรายการที่ผิดพลาด
-
-        order.total_cost = total_cost
-        order.save()
-        return redirect('home')
-
-    today = timezone.now()
-    next_id = MaterialOrder.objects.count() + 1
-    return render(request, 'inventory/order_form.html', {
-        'today': today,
-        'order_id': f"{next_id:05d}"
-    })
 
 # ค้นหาสินค้าแบบ real-time
 @login_required
@@ -295,7 +306,7 @@ def order_material(request):
                 note=note,
                 delivery_round=delivery_round,
                 total_cost=0,
-                approval_status='pending'  # ตั้งค่าเริ่มต้นเป็นรออนุมัติ
+                approval_status='approved'  # ตั้งค่าเริ่มต้นเป็นรออนุมัติ
             )
 
             print('Order created successfully')
@@ -323,7 +334,7 @@ def order_material(request):
                         material=material,
                         quantity=quantity,
                         unit_cost=cost_value,
-                        total_cost=item_total
+                        total_cost=item_total,
                     )
                     total_cost += item_total
                     items_created += 1
@@ -339,7 +350,7 @@ def order_material(request):
             order.total_cost = total_cost
             order.save()
             
-            messages.success(request, f'สร้างรายการสั่งซื้อ MOD-{order.id:05d} เรียบร้อยแล้ว (สถานะ: รออนุมัติ)')
+            messages.success(request, f'สร้างรายการสั่งซื้อ MOD-{order.id:05d} เรียบร้อยแล้ว (สถานะ: อนุมัติแล้ว)')
             return redirect('home')
 
         except DeliveryRound.DoesNotExist:

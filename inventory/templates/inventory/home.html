@@ -14,6 +14,108 @@
   {% endfor %}
 {% endif %}
 
+<!-- Filter Section -->
+<div class="card mb-4">
+  <div class="card-header bg-primary text-white">
+    <h5 class="mb-0"><i class="fas fa-filter me-2"></i>ตัวกรอง</h5>
+  </div>
+  <div class="card-body">
+    <form method="GET" id="filterForm">
+      <div class="row g-3">
+        <!-- Date Range Filter -->
+        <div class="col-md-3">
+          <label for="date_from" class="form-label">จากวันที่</label>
+          <input type="date" class="form-control" id="date_from" name="date_from" value="{{ request.GET.date_from }}">
+        </div>
+        <div class="col-md-3">
+          <label for="date_to" class="form-label">ถึงวันที่</label>
+          <input type="date" class="form-control" id="date_to" name="date_to" value="{{ request.GET.date_to }}">
+        </div>
+        
+        <!-- Delivery Round Filter -->
+        <div class="col-md-3">
+          <label for="delivery_round" class="form-label">รอบการจัดส่ง</label>
+          <select class="form-select" id="delivery_round" name="delivery_round">
+            <option value="">-- ทุกรอบจัดส่ง --</option>
+            {% for round in delivery_rounds %}
+              <option value="{{ round.id }}" 
+                      {% if request.GET.delivery_round == round.id|stringformat:"s" %}selected{% endif %}>
+                {{ round.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <!-- User Filter (Only for admin users) -->
+        {% if request.user.username in admin_list %}
+        <div class="col-md-3">
+          <label for="ordered_by" class="form-label">ผู้สั่ง</label>
+          <select class="form-select" id="ordered_by" name="ordered_by">
+            <option value="">-- ผู้สั่งทั้งหมด --</option>
+            {% for user in users %}
+              <option value="{{ user.id }}" 
+                      {% if request.GET.ordered_by == user.id|stringformat:"s" %}selected{% endif %}>
+                {{ user.username }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        
+        <!-- Status Filter -->
+        <div class="col-md-3">
+          <label for="status" class="form-label">สถานะ</label>
+          <select class="form-select" id="status" name="status">
+            <option value="">-- ทุกสถานะ --</option>
+            <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>รออนุมัติ</option>
+            <option value="approved" {% if request.GET.status == 'approved' %}selected{% endif %}>อนุมัติแล้ว</option>
+            <option value="rejected" {% if request.GET.status == 'rejected' %}selected{% endif %}>ไม่อนุมัติ</option>
+          </select>
+        </div>
+        
+        <!-- Quick Date Filters -->
+        <div class="col-md-9">
+          <label class="form-label">ตัวกรองเร็ว</label>
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateFilter('today')">วันนี้</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateFilter('week')">สัปดาห์นี้</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateFilter('month')">เดือนนี้</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateFilter('all')">ทั้งหมด</button>
+          </div>
+        </div>
+        
+        <!-- Filter Buttons -->
+        <div class="col-md-3">
+          <label class="form-label">&nbsp;</label>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-search me-1"></i>กรอง
+            </button>
+            <a href="{% url 'home' %}" class="btn btn-secondary">
+              <i class="fas fa-times me-1"></i>ล้าง
+            </a>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Active Filters Display -->
+{% if active_filters %}
+<div class="mb-3">
+  <h6>ตัวกรองที่ใช้งาน:</h6>
+  <div class="d-flex flex-wrap gap-2">
+    {% for filter in active_filters %}
+      <span class="badge bg-info">{{ filter }}</span>
+    {% endfor %}
+    <a href="{% url 'home' %}" class="badge bg-danger text-decoration-none">
+      <i class="fas fa-times me-1"></i>ล้างทั้งหมด
+    </a>
+  </div>
+</div>
+{% endif %}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <a href="{% url 'order_material' %}" class="btn btn-success">
     <i class="fas fa-plus"></i> ➕ สั่งวัตถุดิบ
@@ -45,7 +147,6 @@
     </thead>
     <tbody>
       {% for order in orders %}
-      
       <tr>
         <td>
           <strong>MOD-{{ order.id|stringformat:"05d" }}</strong>
@@ -113,10 +214,17 @@
       <tr>
         <td colspan="10" class="text-center text-muted py-4">
           <i class="fas fa-inbox fa-3x mb-3"></i><br>
-          ยังไม่มีรายการสั่งซื้อ<br>
-          <a href="{% url 'order_material' %}" class="btn btn-success btn-sm mt-2">
-            เริ่มสั่งซื้อเลย
-          </a>
+          {% if active_filters %}
+            ไม่พบรายการที่ตรงกับเงื่อนไขการกรอง<br>
+            <a href="{% url 'home' %}" class="btn btn-warning btn-sm mt-2">
+              ล้างตัวกรอง
+            </a>
+          {% else %}
+            ยังไม่มีรายการสั่งซื้อ<br>
+            <a href="{% url 'order_material' %}" class="btn btn-success btn-sm mt-2">
+              เริ่มสั่งซื้อเลย
+            </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -127,26 +235,133 @@
 <!-- สถิติสรุป -->
 <div class="row mt-4">
   <div class="col-md-3">
-    <div class="card text-center">
+    <div class="card text-center border-primary">
       <div class="card-body">
-        <h5 class="card-title text-primary">{{ total_order }}</h5>
+        <h5 class="card-title text-primary">
+          <i class="fas fa-list-alt me-2"></i>{{ total_order }}
+        </h5>
         <p class="card-text">รายการทั้งหมด</p>
+        {% if active_filters %}
+          <small class="text-muted">(หลังกรอง)</small>
+        {% endif %}
       </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card text-center">
+    <div class="card text-center border-success">
       <div class="card-body">
-        <h5 class="card-title text-warning">
-          {{ total_cost }}
+        <h5 class="card-title text-success">
+          <i class="fas fa-money-bill-wave me-2"></i>{{ total_cost|floatformat:2 }}
         </h5>
-        <p class="card-text">ยอดสั่งซื้อ</p>
+        <p class="card-text">ยอดสั่งซื้อ (บาท)</p>
+        {% if active_filters %}
+          <small class="text-muted">(หลังกรอง)</small>
+        {% endif %}
       </div>
     </div>
   </div>
- 
-  
+  <div class="col-md-3">
+    <div class="card text-center border-warning">
+      <div class="card-body">
+        <h5 class="card-title text-warning">
+          <i class="fas fa-clock me-2"></i>{{ status_counts.pending }}
+        </h5>
+        <p class="card-text">รออนุมัติ</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center border-info">
+      <div class="card-body">
+        <h5 class="card-title text-info">
+          <i class="fas fa-check-circle me-2"></i>{{ status_counts.approved }}
+        </h5>
+        <p class="card-text">อนุมัติแล้ว</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Quick date filter functions
+  function setDateFilter(period) {
+    const today = new Date();
+    const dateFrom = document.getElementById('date_from');
+    const dateTo = document.getElementById('date_to');
+    
+    // Format date to YYYY-MM-DD
+    function formatDate(date) {
+      return date.getFullYear() + '-' + 
+             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+             String(date.getDate()).padStart(2, '0');
+    }
+    
+    switch(period) {
+      case 'today':
+        dateFrom.value = formatDate(today);
+        dateTo.value = formatDate(today);
+        break;
+        
+      case 'week':
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        dateFrom.value = formatDate(weekStart);
+        dateTo.value = formatDate(weekEnd);
+        break;
+        
+      case 'month':
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        dateFrom.value = formatDate(monthStart);
+        dateTo.value = formatDate(monthEnd);
+        break;
+        
+      case 'all':
+        dateFrom.value = '';
+        dateTo.value = '';
+        break;
+    }
+    
+    // Auto submit form if dates are set
+    if (period !== 'all') {
+      document.getElementById('filterForm').submit();
+    }
+  }
+  
+  // Auto-submit on select change
+  document.querySelectorAll('select').forEach(select => {
+    select.addEventListener('change', function() {
+      document.getElementById('filterForm').submit();
+    });
+  });
+  
+  // Set today's date as max for date inputs
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('date_from').setAttribute('max', today);
+  document.getElementById('date_to').setAttribute('max', today);
+  
+  // Validate date range
+  document.getElementById('date_from').addEventListener('change', function() {
+    const dateFrom = this.value;
+    const dateTo = document.getElementById('date_to').value;
+    
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      alert('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+      this.value = '';
+    }
+  });
+  
+  document.getElementById('date_to').addEventListener('change', function() {
+    const dateFrom = document.getElementById('date_from').value;
+    const dateTo = this.value;
+    
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      alert('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น');
+      this.value = '';
+    }
+  });
+</script>
 {% endblock %}
